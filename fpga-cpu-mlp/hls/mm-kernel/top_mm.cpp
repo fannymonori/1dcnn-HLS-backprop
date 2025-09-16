@@ -46,11 +46,11 @@ void top_mm(
 #pragma HLS INTERFACE s_axilite port=do_tanh bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
-    HLSNN_DataType weight_buffer[TILE_SIZE][TILE_SIZE][BRAM_BUFFER_SIZE];
-#pragma HLS ARRAY_PARTITION variable=weight_buffer dim=1 complete
-#pragma HLS ARRAY_PARTITION variable=weight_buffer dim=2 complete
-#pragma HLS ARRAY_PARTITION variable=weight_buffer dim=3 off
-#pragma HLS bind_storage variable=weight_buffer type=RAM_2P impl=bram
+    HLSNN_DataType weight_storage[TILE_SIZE][TILE_SIZE][BRAM_BUFFER_SIZE];
+#pragma HLS ARRAY_PARTITION variable=weight_storage dim=1 complete
+#pragma HLS ARRAY_PARTITION variable=weight_storage dim=2 complete
+#pragma HLS ARRAY_PARTITION variable=weight_storage dim=3 off
+#pragma HLS bind_storage variable=weight_storage type=RAM_2P impl=bram
 
     HLSNN_DataType output_storage[BRAM_BUFFER_SIZE_LARGE];
 	HLSNN_DataType bias_storage[MAX_F];
@@ -68,7 +68,7 @@ void top_mm(
 	HLSNN_DataType storage_1D[TILE_SIZE];
 #pragma HLS ARRAY_PARTITION variable=storage_1D dim=0 complete
 
-    wide_type weight_tmp_buffer[BRAM_BUFFER_SIZE];
+    wide_type weight_partial[BRAM_BUFFER_SIZE];
 
     //######################################################################################### FORWARD
 
@@ -199,7 +199,7 @@ void top_mm(
 						weight_count++;
 						for(unsigned ff = 0; ff < WIDE_LEN; ff++){
 		                #pragma HLS UNROLL
-							weight_buffer[cc][ff][f_] = tmp[ff];
+							weight_storage[cc][ff][f_] = tmp[ff];
 						}
 					}
 				}
@@ -267,13 +267,13 @@ void top_mm(
 						if(do_FW){
 							A_index = cc;
 							last = tmp;
-							B = weight_buffer[cc][ff][f];
+							B = weight_storage[cc][ff][f];
 						}
 
 						if(do_dX){
 							A_index = ff;
 							last = storage_2D[ff][cc];
-							B = weight_buffer[cc][ff][f];
+							B = weight_storage[cc][ff][f];
 						}
 
 						if(do_dW){
@@ -309,7 +309,7 @@ void top_mm(
 					for(unsigned ff = 0; ff < TILE_SIZE; ff++){
                     #pragma HLS UNROLL
 						for(unsigned cc = 0; cc < TILE_SIZE; cc++){
-							weight_buffer[ff][cc][f] = storage_2D[ff][cc];
+							weight_storage[ff][cc][f] = storage_2D[ff][cc];
 						}
 					}
 
@@ -341,7 +341,7 @@ void top_mm(
 
 				for(unsigned cc = 0; cc < COLS * TILE_SIZE; cc++){
                 #pragma HLS LOOP_TRIPCOUNT min=16 max=128
-					weight_tmp_buffer[cc] = weight.read();
+					weight_partial[cc] = weight.read();
 				}
 
 				weight.write_request(weight_start, COLS * TILE_SIZE);
@@ -354,10 +354,10 @@ void top_mm(
 						unsigned f_start = f_ * WIDE_LEN;
 
 						wide_type tmp;
-						wide_type tmp_2 = weight_tmp_buffer[w_tmp_count];
+						wide_type tmp_2 = weight_partial[w_tmp_count];
 						for(unsigned ff = 0; ff < WIDE_LEN; ff++){
                         #pragma HLS UNROLL
-							HLSNN_DataType v1 = weight_buffer[cc][ff][f_];
+							HLSNN_DataType v1 = weight_storage[cc][ff][f_];
 							HLSNN_DataType v2 = tmp_2[ff];
 							HLSNN_DataType add_ = v1 + v2;
 
